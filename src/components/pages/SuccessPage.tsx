@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Check, ArrowLeft, Twitter, Instagram, Share2, Sparkles, Home } from 'lucide-react';
+import { Check, ArrowLeft, Twitter, Instagram, Share2, Sparkles } from 'lucide-react';
 
 const SuccessPage = () => {
   // 1. 获取从上一页 (SubmitPage) 传过来的 submissionId
