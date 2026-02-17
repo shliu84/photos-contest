@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* 这里定义你的自定义动画，替代了以前的 tailwind.config.js */
+@theme {
+  --animate-pulse-slow: pulse-slow 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in-up: fade-in-up 1s ease-out forwards;
+}
+
+/* 这里定义动画的关键帧 */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes shine {
+  100% {
+    left: 125%;
+  }
+}
