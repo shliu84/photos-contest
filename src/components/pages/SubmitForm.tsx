@@ -1,20 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Upload, Image as ImageIcon, X, ChevronRight, Check, Info } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Upload, Image as ImageIcon, X, ChevronRight, Check, Info, Loader2 } from "lucide-react";
 
 const MAX_PHOTOS = 5;
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-const SubmitForm = () => {
+const SubmitPage = () => {
+  const navigate = useNavigate();
+  
+  // --- 状态管理 ---
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
 
   // 生成预览 & 释放 URL
   useEffect(() => {
     const urls = files.map((f) => URL.createObjectURL(f));
     setPreviews(urls);
-
     return () => {
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
@@ -22,14 +26,13 @@ const SubmitForm = () => {
 
   const canAddMore = files.length < MAX_PHOTOS;
 
+  // --- 文件处理逻辑 ---
   const handleFilesAdd = (incoming: FileList | null) => {
     if (!incoming || incoming.length === 0) return;
-
     setError(null);
 
     const incomingFiles = Array.from(incoming);
 
-    // 过滤非图片/过大
     const valid = incomingFiles.filter((f) => {
       if (!f.type.startsWith("image/")) return false;
       if (f.size > MAX_SIZE) return false;
@@ -40,7 +43,6 @@ const SubmitForm = () => {
       setError("画像ファイルのみ / 10MB以内のファイルを選択してください。");
     }
 
-    // 最多 5 张
     const remain = MAX_PHOTOS - files.length;
     const toAdd = valid.slice(0, remain);
 
@@ -60,55 +62,39 @@ const SubmitForm = () => {
     setError(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  // --- 修改后的提交逻辑 (模拟提交，直接跳转) ---
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
+    // 1. 基础验证保留 (为了体验更真实)
     if (files.length === 0) {
       setError("写真ファイルは必須です。");
       return;
     }
-
-    const formEl = e.currentTarget;
-
-    // HTML required 会先拦一部分，但这里再兜底一下
-    const agreed = (formEl.elements.namedItem("agreed_terms") as HTMLInputElement | null)?.checked;
     if (!agreed) {
-      setError("応募規約・プライバシーポリシーに同意してください。");
+      setError("応募規約に同意してください。");
       return;
     }
 
-    const fd = new FormData(formEl);
-
-    // 关键：把图片以 photos 追加（后端用 form.getAll("photos")）
-    fd.delete("photos"); // 防止某些浏览器自动带上空 FileList
-    files.forEach((f) => fd.append("photos", f));
-
     setSubmitting(true);
-    try {
-      const res = await fetch("/api/submit", {
-        method: "POST",
-        body: fd,
-      });
-      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        throw new Error(data?.error || "送信に失敗しました。");
-      }
-
-      // MVP：成功后清空表单，也可以改成跳转确认/完了页
-      formEl.reset();
-      clearAll();
-      alert(`送信完了：${data.submissionId}`);
-    } catch (err: any) {
-      setError(err?.message || "送信に失敗しました。");
-    } finally {
+    // 2. 模拟网络请求 (延迟 1.5 秒)
+    setTimeout(() => {
       setSubmitting(false);
-    }
+
+      // 生成一个假的 ID
+      const dummyId = "TEST-" + Math.floor(Math.random() * 1000000).toString();
+
+      // 3. 直接跳转到成功页面
+      console.log("Mock Submit Success:", dummyId);
+      navigate("/success", { state: { submissionId: dummyId } });
+      
+    }, 1500); 
   };
 
   return (
-    <div className="pt-24 pb-20 px-4 max-w-3xl mx-auto">
+    <div className="pt-24 pb-20 px-4 max-w-3xl mx-auto animate-fade-in-up">
       {/* 标题区域 */}
       <div className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">応募フォーム</h1>
@@ -121,33 +107,28 @@ const SubmitForm = () => {
       {/* 步骤条 */}
       <div className="flex justify-center items-center gap-4 mb-10 text-sm font-bold">
         <div className="flex flex-col items-center text-[#c0a062]">
-          <div className="w-8 h-8 rounded-full bg-[#c0a062] text-white flex items-center justify-center mb-1">
-            1
-          </div>
+          <div className="w-8 h-8 rounded-full bg-[#c0a062] text-white flex items-center justify-center mb-1">1</div>
           <span>入力</span>
         </div>
         <div className="w-12 h-0.5 bg-gray-200"></div>
         <div className="flex flex-col items-center text-gray-400">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-white flex items-center justify-center mb-1">
-            2
-          </div>
+          <div className="w-8 h-8 rounded-full bg-gray-200 text-white flex items-center justify-center mb-1">2</div>
           <span>確認</span>
         </div>
         <div className="w-12 h-0.5 bg-gray-200"></div>
         <div className="flex flex-col items-center text-gray-400">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-white flex items-center justify-center mb-1">
-            3
-          </div>
+          <div className="w-8 h-8 rounded-full bg-gray-200 text-white flex items-center justify-center mb-1">3</div>
           <span>完了</span>
         </div>
       </div>
 
       {/* 表单主体卡片 */}
       <form onSubmit={handleSubmit} className="bg-white p-6 md:p-10 rounded-[2rem] shadow-xl shadow-orange-100/50 border border-gray-100">
+        
         {/* 顶部错误提示 */}
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+             <Info size={16} /> {error}
           </div>
         )}
 
@@ -170,14 +151,12 @@ const SubmitForm = () => {
               `}>
                 <input
                   type="file"
-                  name="photos"
                   multiple
                   accept="image/*"
                   disabled={!canAddMore || submitting}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                   onChange={(e) => {
                     handleFilesAdd(e.target.files);
-                    // 允许再次选择同一文件
                     e.currentTarget.value = "";
                   }}
                 />
@@ -193,9 +172,9 @@ const SubmitForm = () => {
                 </p>
               </div>
 
-              {/* 预览区（网格缩略图） */}
+              {/* 预览区 */}
               {files.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4 animate-fade-in-up">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm text-gray-600">
                       選択済み：<span className="font-bold text-gray-800">{files.length}</span> / {MAX_PHOTOS}
@@ -212,14 +191,13 @@ const SubmitForm = () => {
 
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {files.map((f, idx) => (
-                      <div key={`${f.name}-${idx}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-900">
+                      <div key={`${f.name}-${idx}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-900 group">
                         <img src={previews[idx]} alt={f.name} className="w-full h-32 object-cover" />
                         <button
                           type="button"
                           onClick={() => removeAt(idx)}
                           disabled={submitting}
                           className="absolute top-2 right-2 bg-white/90 text-red-500 p-1.5 rounded-full shadow hover:bg-red-500 hover:text-white transition-all disabled:opacity-50"
-                          aria-label="remove"
                         >
                           <X size={16} />
                         </button>
@@ -381,37 +359,67 @@ const SubmitForm = () => {
           </div>
         </div>
 
-        {/* ================= 底部确认 ================= */}
-        <div className="bg-gray-50 p-6 rounded-2xl mb-8">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              name="agreed_terms"
-              type="checkbox"
-              required
-              className="mt-1 w-5 h-5 accent-[#c0a062]"
-              disabled={submitting}
-            />
+        {/* ================= 底部确认与按钮 ================= */}
+        
+        {/* Checkbox (受控组件) */}
+        <div className="bg-gray-50 p-6 rounded-2xl mb-8 border border-gray-100">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <div className="relative flex items-center pt-1">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                disabled={submitting}
+              />
+              <div className="w-5 h-5 border-2 border-gray-300 rounded peer-checked:bg-[#c0a062] peer-checked:border-[#c0a062] transition-colors flex items-center justify-center">
+                <Check size={14} className="text-white opacity-0 peer-checked:opacity-100" />
+              </div>
+            </div>
             <span className="text-sm text-gray-600 leading-relaxed">
-              <a href="#" className="text-[#c0a062] underline hover:text-black">
-                応募規約
-              </a>{" "}
-              および{" "}
-              <a href="#" className="text-[#c0a062] underline hover:text-black">
-                プライバシーポリシー
-              </a>{" "}
-              に同意の上、応募します。
+              <a href="#" className="text-[#c0a062] font-bold hover:text-black">応募規約</a>
+              {" "}および{" "}
+              <a href="#" className="text-[#c0a062] font-bold hover:text-black">プライバシーポリシー</a>
+              {" "}に同意の上、応募します。
             </span>
           </label>
         </div>
 
+        {/* 金色渐变按钮 */}
         <div className="text-center">
           <button
             type="submit"
-            disabled={submitting}
-            className="w-full md:w-2/3 bg-gradient-to-r from-[#dcb773] to-[#c0a062] text-white px-8 py-4 rounded-full text-lg font-bold shadow-lg shadow-[#c0a062]/30 hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
+            disabled={submitting || !agreed}
+            className={`
+              group relative w-full md:w-2/3 px-8 py-4 rounded-full text-lg font-bold text-white
+              flex items-center justify-center gap-3 transition-all duration-300
+              ${!agreed || submitting
+                ? 'bg-gray-300 cursor-not-allowed shadow-none' // 禁用状态
+                : 'bg-gradient-to-r from-[#dcb773] to-[#c0a062] shadow-[0_10px_30px_-10px_rgba(192,160,98,0.5)] hover:shadow-[0_15px_30px_-10px_rgba(192,160,98,0.7)] hover:-translate-y-1 hover:scale-[1.02]' // 激活状态
+              }
+            `}
           >
-            {submitting ? "送信中..." : "確認画面へ進む"} <ChevronRight size={20} />
+            {submitting ? (
+              <>
+                <Loader2 className="animate-spin" size={24} />
+                <span>送信中...</span>
+              </>
+            ) : (
+              <>
+                <span>投稿する</span>
+                <div className="bg-white/20 rounded-full p-1 group-hover:translate-x-1 transition-transform">
+                  <ChevronRight size={20} />
+                </div>
+              </>
+            )}
           </button>
+          
+          {/* 未勾选时的提示 */}
+          {!agreed && !submitting && (
+            <p className="text-xs text-red-400 mt-3 animate-pulse">
+              ※ 上記の規約に同意チェックを入れてください
+            </p>
+          )}
         </div>
       </form>
     </div>
@@ -425,4 +433,4 @@ const BadgeRequired = () => (
   </span>
 );
 
-export default SubmitForm;
+export default SubmitPage;

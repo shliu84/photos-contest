@@ -8,6 +8,7 @@ import News from './components/sections/News';
 import Story from './components/sections/Story';
 import Overview from './components/sections/Overview';
 import SubmitForm from './components/pages/SubmitForm';
+import SuccessPage from './components/pages/SuccessPage';
 
 function HomePage({ onNavigateToSubmit }: { onNavigateToSubmit: () => void }) {
   return (
@@ -58,6 +59,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage onNavigateToSubmit={navigateToSubmit} />} />
         <Route path="/submit" element={<SubmitForm />} />
+        <Route path="/success" element={<SuccessPage />} />
       </Routes>
 
       <Footer />
