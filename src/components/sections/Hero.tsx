@@ -1,4 +1,3 @@
-import React from 'react';
 import { Camera, ChevronRight, Sparkles } from 'lucide-react';
 
 const Hero = () => (

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Calendar, Camera, Award } from 'lucide-react';
 
 // 内部小组件：圆润的卡片
