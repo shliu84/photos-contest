@@ -1,6 +1,8 @@
 import { Camera, ChevronRight, Sparkles } from 'lucide-react';
-
-const Hero = () => (
+interface HeroProps {
+onNavigateToSubmit: () => void;
+}
+const Hero: React.FC<HeroProps> = ({ onNavigateToSubmit }) => 
   <header className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-[#fffbf5]">
     {/* 背景图层 - 更加柔和的融合 */}
     <div className="absolute inset-0 z-0">
@@ -49,7 +51,7 @@ const Hero = () => (
       <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
         
         {/* 核心按钮：变大、变亮、加投影 */}
-        <button className="group relative w-full sm:w-auto bg-gradient-to-r from-[#dcb773] to-[#c0a062] text-white px-12 py-5 rounded-full text-xl font-bold shadow-[0_10px_40px_-10px_rgba(192,160,98,0.6)] hover:shadow-[0_20px_40px_-10px_rgba(192,160,98,0.8)] transition-all transform hover:-translate-y-1 hover:scale-105 flex items-center justify-center gap-3 overflow-hidden">
+        <button  onClick={onNavigateToSubmit} className="group relative w-full sm:w-auto bg-gradient-to-r from-[#dcb773] to-[#c0a062] text-white px-12 py-5 rounded-full text-xl font-bold shadow-[0_10px_40px_-10px_rgba(192,160,98,0.6)] hover:shadow-[0_20px_40px_-10px_rgba(192,160,98,0.8)] transition-all transform hover:-translate-y-1 hover:scale-105 flex items-center justify-center gap-3 overflow-hidden">
           {/* 按钮内的光泽动画 */}
           <div className="absolute top-0 left-0 w-full h-full bg-white/20 -skew-x-12 -translate-x-full group-hover:animate-[shine_1s_infinite]" />
           
@@ -64,6 +66,6 @@ const Hero = () => (
       </div>
     </div>
   </header>
-);
+;
 
 export default Hero;
