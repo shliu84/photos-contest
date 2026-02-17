@@ -1,68 +1,85 @@
-import { ChevronRight } from 'lucide-react';
-
 const newsData = [
-  { id: '1', date: '2026.03.06', tag: 'Info', title: '写真コンテスト 応募受付を開始しました！', isNew: true },
-  { id: '2', date: '2026.02.28', tag: 'Event', title: '【予告】上野公園にて特別写真展の開催が決定', isNew: false },
-  { id: '3', date: '2026.02.15', tag: 'Media', title: '雑誌『和華』春号に特集記事が掲載されました', isNew: false },
+  {
+    id: '1',
+    date: '2026.03.06',
+    tag: 'Info',
+    title: '写真コンテスト 応募受付を開始しました！',
+    isNew: true,
+  },
+  {
+    id: '2',
+    date: '2026.02.28',
+    tag: 'Event',
+    title: '【予告】上野公園にて特別写真展の開催が決定',
+    isNew: false,
+  },
+  {
+    id: '3',
+    date: '2026.02.15',
+    tag: 'Media',
+    title: '雑誌『和華』春号に特集記事が掲載されました',
+    isNew: false,
+  },
 ];
+
+const tagClass = (tag: string) =>
+  tag === 'Info'
+    ? 'bg-blue-50 text-blue-600'
+    : tag === 'Event'
+    ? 'bg-green-50 text-green-600'
+    : 'bg-orange-50 text-orange-600';
 
 const News = () => {
   return (
-    // 背景改为稍微深一点点的暖白，突出卡片
-    <section id="news" className="py-20 bg-[#f8f4eb]">
-      <div className="max-w-4xl mx-auto px-6">
-        
-        <div className="flex items-center justify-between mb-10">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
-            <span className="w-2 h-8 bg-[#c0a062] rounded-full"></span>
+    <section id="news" className="py-14 md:py-20 bg-[#f8f4eb]">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+
+        {/* 标题 */}
+        <div className="mb-6 md:mb-10">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
+            <span className="w-2 h-7 sm:h-8 bg-[#c0a062] rounded-full" />
             お知らせ
           </h2>
-          <a href="#" className="text-sm font-bold text-[#c0a062] hover:opacity-70 flex items-center gap-1">
-            VIEW ALL <ChevronRight size={16} />
-          </a>
         </div>
 
-        <div className="space-y-4">
+        {/* 新闻列表 */}
+        <div className="space-y-3 sm:space-y-4">
           {newsData.map((item) => (
-            <a 
-              key={item.id} 
-              href="#"
-              className="group block bg-white p-5 rounded-2xl shadow-sm hover:shadow-lg hover:shadow-orange-100/50 hover:-translate-y-0.5 transition-all duration-300 border border-transparent hover:border-orange-100"
+            <div
+              key={item.id}
+              className="bg-white rounded-2xl border border-orange-50 shadow-sm"
             >
-              <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
-                
-                {/* 左侧信息 */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-mono text-gray-400 font-medium">
+              <div className="p-4 sm:p-5 select-text">
+                {/* 同一行容器：日期 + Tag + 标题 + NEW */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {/* 日期 */}
+                  <span className="text-xs sm:text-sm font-mono text-gray-400 font-medium shrink-0">
                     {item.date}
                   </span>
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
-                    item.tag === 'Info' ? 'bg-blue-50 text-blue-500' :
-                    item.tag === 'Event' ? 'bg-green-50 text-green-500' :
-                    'bg-orange-50 text-orange-500'
-                  }`}>
+
+                  {/* Tag */}
+                  <span
+                    className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${tagClass(
+                      item.tag
+                    )}`}
+                  >
                     {item.tag}
                   </span>
-                </div>
 
-                {/* 标题 */}
-                <div className="flex-grow flex items-center gap-2">
-                  <h3 className="text-base font-bold text-gray-700 group-hover:text-[#c0a062] transition-colors line-clamp-1">
+                  {/* 标题（可换行的关键） */}
+                  <h3 className="text-sm sm:text-base font-bold text-gray-700 min-w-0">
                     {item.title}
                   </h3>
+
+                  {/* NEW */}
                   {item.isNew && (
-                    <span className="shrink-0 text-[10px] font-bold text-white bg-red-400 px-2 py-0.5 rounded-full animate-bounce">
+                    <span className="shrink-0 text-[10px] font-bold text-white bg-red-400 px-2 py-0.5 rounded-full">
                       NEW
                     </span>
                   )}
                 </div>
-                
-                {/* 箭头 */}
-                <div className="hidden md:block text-gray-300 group-hover:text-[#c0a062] transition-colors">
-                  <ChevronRight size={20} />
-                </div>
               </div>
-            </a>
+            </div>
           ))}
         </div>
 
