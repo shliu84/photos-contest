@@ -43,7 +43,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigateToHome, onNavigateToSubmit })
               }, 0);
             }}
           >
-            TOP
+            ホーム
           </button>
 
           <button className={navButtonClass} onClick={() => goHomeAndScroll('about')}>

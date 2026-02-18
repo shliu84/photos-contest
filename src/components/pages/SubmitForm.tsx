@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, Image as ImageIcon, X, ChevronRight, Check, Info, Loader2 } from "lucide-react";
 
 const MAX_PHOTOS = 5;
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+// 定义每一张照片上传成功后的元数据结构
+interface PhotoMeta {
+  r2_key: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+}
 
 const SubmitPage = () => {
   const navigate = useNavigate();
@@ -11,6 +19,7 @@ const SubmitPage = () => {
   // --- 状态管理 ---
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [photoMetas, setPhotoMetas] = useState<(PhotoMeta | null)[]>([]); 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
@@ -26,7 +35,54 @@ const SubmitPage = () => {
 
   const canAddMore = files.length < MAX_PHOTOS;
 
-  // --- 文件处理逻辑 ---
+  // --- 核心逻辑：单张图片上传到 R2 (Updated) ---
+  const uploadToR2 = async (file: File, index: number) => {
+    try {
+      // 1. 获取签名信息 (URL + Headers)
+      const res = await fetch(`/api/upload-url?filename=${encodeURIComponent(file.name)}`);
+      if (!res.ok) throw new Error("アップロード情報の取得に失敗しました");
+      
+      // ✅ 变更点：这里解构出 headers
+      const { url, key, headers } = await res.json();
+
+      // 2. 直传 R2 (PUT)
+      // ✅ 变更点：将接口返回的 headers 放入请求头
+      const uploadRes = await fetch(url, {
+        method: "PUT",
+        headers: {
+          ...headers, // 必须包含 Authorization, x-amz-date 等
+          "Content-Type": file.type, // 建议带上，确保 R2 知道这是图片
+        },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(`R2 Upload Failed: ${uploadRes.status} ${errText}`);
+      }
+
+      // 3. 更新元数据 (表示上传完成)
+      const meta: PhotoMeta = {
+        r2_key: key,
+        original_filename: file.name,
+        content_type: file.type,
+        size_bytes: file.size,
+      };
+
+      setPhotoMetas((prev) => {
+        const next = [...prev];
+        next[index] = meta;
+        return next;
+      });
+
+    } catch (err: any) {
+      console.error("Upload Error:", err);
+      setError(`${file.name} のアップロードに失敗しました: ${err.message}`);
+      removeAt(index);
+    }
+  };
+
+  // --- 文件选择处理逻辑 ---
   const handleFilesAdd = (incoming: FileList | null) => {
     if (!incoming || incoming.length === 0) return;
     setError(null);
@@ -50,28 +106,43 @@ const SubmitPage = () => {
       setError(`写真は最大${MAX_PHOTOS}枚までです。`);
     }
 
+    if (toAdd.length === 0) return;
+
+    const startIndex = files.length;
     setFiles((prev) => [...prev, ...toAdd]);
+    setPhotoMetas((prev) => [...prev, ...new Array(toAdd.length).fill(null)]);
+
+    toAdd.forEach((file, i) => {
+      uploadToR2(file, startIndex + i);
+    });
   };
 
   const removeAt = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+    setPhotoMetas((prev) => prev.filter((_, i) => i !== index));
   };
 
   const clearAll = () => {
     setFiles([]);
+    setPhotoMetas([]);
     setError(null);
   };
 
-  // --- 修改后的提交逻辑 (模拟提交，直接跳转) ---
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  // --- 提交表单逻辑 ---
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    // 1. 基础验证保留 (为了体验更真实)
     if (files.length === 0) {
       setError("写真ファイルは必須です。");
       return;
     }
+    
+    if (photoMetas.some((meta) => meta === null)) {
+      setError("画像のアップロード中です。完了まで少々お待ちください。");
+      return;
+    }
+
     if (!agreed) {
       setError("応募規約に同意してください。");
       return;
@@ -79,23 +150,47 @@ const SubmitPage = () => {
 
     setSubmitting(true);
 
-    // 2. 模拟网络请求 (延迟 1.5 秒)
-    setTimeout(() => {
+    const formData = new FormData(e.currentTarget);
+    
+    const payload = {
+      work_title: formData.get("work_title"),
+      episode: formData.get("episode"),
+      name_kanji: formData.get("name_kanji"),
+      name_kana: formData.get("name_kana"),
+      email: formData.get("email"),
+      phone: formData.get("phone"),
+      agreed_terms: 1,
+      shoot_date: formData.get("shoot_date") || undefined,
+      shoot_location: formData.get("shoot_location") || undefined,
+      pen_name: formData.get("pen_name") || undefined,
+      photos: photoMetas as PhotoMeta[], 
+    };
+
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "送信に失敗しました");
+      }
+
+      console.log("Submit Success:", result);
+      navigate("/success", { state: { submissionId: result.submissionId } });
+
+    } catch (err: any) {
+      setError(err.message || "エラーが発生しました。");
+    } finally {
       setSubmitting(false);
-
-      // 生成一个假的 ID
-      const dummyId = "TEST-" + Math.floor(Math.random() * 1000000).toString();
-
-      // 3. 直接跳转到成功页面
-      console.log("Mock Submit Success:", dummyId);
-      navigate("/success", { state: { submissionId: dummyId } });
-      
-    }, 1500); 
+    }
   };
 
   return (
     <div className="pt-24 pb-20 px-4 max-w-3xl mx-auto animate-fade-in-up">
-      {/* 标题区域 */}
       <div className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">応募フォーム</h1>
         <p className="text-gray-500">
@@ -122,17 +217,13 @@ const SubmitPage = () => {
         </div>
       </div>
 
-      {/* 表单主体卡片 */}
       <form onSubmit={handleSubmit} className="bg-white p-6 md:p-10 rounded-[2rem] shadow-xl shadow-orange-100/50 border border-gray-100">
-        
-        {/* 顶部错误提示 */}
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2 animate-pulse">
              <Info size={16} /> {error}
           </div>
         )}
 
-        {/* ================= SECTION 1: 作品上传 ================= */}
         <div className="mb-12">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2 border-b border-gray-100 pb-2">
             <ImageIcon className="text-[#c0a062]" size={24} />
@@ -145,7 +236,6 @@ const SubmitPage = () => {
                 写真ファイル（最大{MAX_PHOTOS}枚） <BadgeRequired />
               </label>
 
-              {/* 上传区 */}
               <div className={`relative w-full h-56 border-2 border-dashed rounded-2xl transition-colors flex flex-col items-center justify-center cursor-pointer group
                 ${canAddMore ? "border-gray-300 bg-gray-50 hover:bg-orange-50 hover:border-[#c0a062]" : "border-gray-200 bg-gray-100 cursor-not-allowed"}
               `}>
@@ -172,7 +262,6 @@ const SubmitPage = () => {
                 </p>
               </div>
 
-              {/* 预览区 */}
               {files.length > 0 && (
                 <div className="mt-4 animate-fade-in-up">
                   <div className="flex items-center justify-between mb-3">
@@ -191,17 +280,27 @@ const SubmitPage = () => {
 
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {files.map((f, idx) => (
-                      <div key={`${f.name}-${idx}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-900 group">
-                        <img src={previews[idx]} alt={f.name} className="w-full h-32 object-cover" />
+                      <div key={`${f.name}-${idx}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-900 group h-32">
+                        <img 
+                          src={previews[idx]} 
+                          alt={f.name} 
+                          className={`w-full h-full object-cover transition-opacity duration-300 ${!photoMetas[idx] ? 'opacity-50' : 'opacity-100'}`} 
+                        />
+                        {!photoMetas[idx] && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-black/30 z-10">
+                            <Loader2 className="animate-spin mb-1" size={24} />
+                            <span className="text-[10px] font-bold">UP...</span>
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={() => removeAt(idx)}
                           disabled={submitting}
-                          className="absolute top-2 right-2 bg-white/90 text-red-500 p-1.5 rounded-full shadow hover:bg-red-500 hover:text-white transition-all disabled:opacity-50"
+                          className="absolute top-2 right-2 bg-white/90 text-red-500 p-1.5 rounded-full shadow hover:bg-red-500 hover:text-white transition-all disabled:opacity-50 z-20"
                         >
                           <X size={16} />
                         </button>
-                        <div className="absolute bottom-0 left-0 w-full bg-black/60 text-white px-2 py-1 text-[11px] truncate">
+                        <div className="absolute bottom-0 left-0 w-full bg-black/60 text-white px-2 py-1 text-[11px] truncate z-20">
                           {idx + 1}. {f.name}
                         </div>
                       </div>
@@ -211,7 +310,6 @@ const SubmitPage = () => {
               )}
             </div>
 
-            {/* 作品标题 */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 作品タイトル <BadgeRequired />
@@ -225,7 +323,6 @@ const SubmitPage = () => {
               />
             </div>
 
-            {/* 作品故事 */}
             <div>
               <div className="flex justify-between items-end mb-2">
                 <label className="block text-sm font-bold text-gray-700">
@@ -244,7 +341,6 @@ const SubmitPage = () => {
           </div>
         </div>
 
-        {/* ================= SECTION 2: 撮影情報 ================= */}
         <div className="mb-12">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2 border-b border-gray-100 pb-2">
             <Info className="text-[#c0a062]" size={24} />
@@ -280,7 +376,6 @@ const SubmitPage = () => {
           </div>
         </div>
 
-        {/* ================= SECTION 3: 応募者情報 ================= */}
         <div className="mb-12">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2 border-b border-gray-100 pb-2">
             <Check className="text-[#c0a062]" size={24} />
@@ -288,7 +383,6 @@ const SubmitPage = () => {
           </h2>
 
           <div className="space-y-6">
-            {/* 姓名 */}
             <div className="grid md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -316,7 +410,6 @@ const SubmitPage = () => {
               </div>
             </div>
 
-            {/* 笔名 */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 ペンネーム <span className="text-xs text-gray-400 font-normal ml-2">※公開時に使用されます</span>
@@ -329,7 +422,6 @@ const SubmitPage = () => {
               />
             </div>
 
-            {/* 邮箱 */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 メールアドレス <BadgeRequired />
@@ -343,7 +435,6 @@ const SubmitPage = () => {
               />
             </div>
 
-            {/* 电话 */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 電話番号 <BadgeRequired />
@@ -358,10 +449,7 @@ const SubmitPage = () => {
             </div>
           </div>
         </div>
-
-        {/* ================= 底部确认与按钮 ================= */}
         
-        {/* Checkbox (受控组件) */}
         <div className="bg-gray-50 p-6 rounded-2xl mb-8 border border-gray-100">
           <label className="flex items-start gap-3 cursor-pointer group">
             <div className="relative flex items-center pt-1">
@@ -385,7 +473,6 @@ const SubmitPage = () => {
           </label>
         </div>
 
-        {/* 金色渐变按钮 */}
         <div className="text-center">
           <button
             type="submit"
@@ -414,7 +501,6 @@ const SubmitPage = () => {
             )}
           </button>
           
-          {/* 未勾选时的提示 */}
           {!agreed && !submitting && (
             <p className="text-xs text-red-400 mt-3 animate-pulse">
               ※ 上記の規約に同意チェックを入れてください
@@ -426,7 +512,6 @@ const SubmitPage = () => {
   );
 };
 
-// 辅助组件：必填标签
 const BadgeRequired = () => (
   <span className="inline-block bg-red-400 text-white text-[10px] px-2 py-0.5 rounded-full ml-1 align-middle">
     必須

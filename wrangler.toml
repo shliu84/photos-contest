@@ -1,5 +1,5 @@
 name = "panda-photo-contest-api"
-compatibility_date = "2026-02-17"
+compatibility_date = "2026-02-12"
 
 # 关键：Pages 必须有这个，用来指定静态产物目录
 pages_build_output_dir = "dist"
@@ -14,3 +14,4 @@ database_id = "db456420-c2cd-4d53-8bdb-320c780137c9"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "panda-assets"
+remote = true

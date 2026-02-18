@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Check, ArrowLeft, Twitter, Instagram, Share2, Sparkles } from 'lucide-react';
+import { Check, ArrowLeft, X, Instagram, Share2, Sparkles } from 'lucide-react';
 
 const SuccessPage = () => {
   // 1. 获取从上一页 (SubmitPage) 传过来的 submissionId
@@ -82,7 +82,7 @@ const SuccessPage = () => {
               onClick={shareToX}
               className="group flex items-center justify-center gap-2 bg-black text-white px-6 py-3.5 rounded-full font-bold hover:bg-gray-800 transition-all hover:-translate-y-1 shadow-lg shadow-gray-200"
             >
-              <Twitter size={18} fill="currentColor" />
+              <X size={18} fill="currentColor" />
               <span>Xでポスト</span>
             </button>
             
