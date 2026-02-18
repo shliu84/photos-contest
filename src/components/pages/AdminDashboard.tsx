@@ -69,6 +69,9 @@ type ApiResponse = {
   error?: string;
 };
 
+// ==========================================
+// UI Helpers
+// ==========================================
 const StatusBadge = ({ status }: { status: Status }) => {
   const styles: Record<Status, string> = {
     pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
@@ -99,18 +102,15 @@ function formatDate(ms?: number) {
 }
 
 // ✅ 你的 R2 公网基地址（bucket 前缀已经包含在内）
-const R2_PUBLIC_BASE =
-  'https://pub-53126c2046dd42889f441204e6e3cc12.r2.dev';
+const R2_PUBLIC_BASE = 'https://pub-53126c2046dd42889f441204e6e3cc12.r2.dev';
 
 function buildR2Url(r2Key?: string) {
   if (!r2Key) return '';
-  // 防止出现 //uploads 这种情况
   const key = r2Key.startsWith('/') ? r2Key.slice(1) : r2Key;
   return `${R2_PUBLIC_BASE}/${key}`;
 }
 
 function getCoverUrl(s: Submission) {
-  // 优先 sort_order 最小的（如果没给 sort_order，就按数组顺序）
   const photos = s.photos ?? [];
   if (photos.length === 0) return '';
   const sorted = [...photos].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
@@ -150,7 +150,6 @@ function mapStatus(apiStatus: string): Status {
   const s = (apiStatus || '').toLowerCase();
   if (s === 'approved' || s === 'accept' || s === 'accepted') return 'approved';
   if (s === 'rejected' || s === 'reject' || s === 'denied') return 'rejected';
-  // 你的 "submitted" / "pending" / 其他 → 统一当 pending
   return 'pending';
 }
 
@@ -161,7 +160,6 @@ function normalizeSubmission(s: SubmissionApi): Submission {
   const email = s.email ?? '';
   const date = s.shoot_date || formatDate(s.created_at_ms);
 
-  // 你原 UI 用 description，这里拼一个可读描述（也可以换成 admin_note）
   const descParts = [
     s.episode ? `Episode: ${s.episode}` : '',
     s.shoot_location ? `Location: ${s.shoot_location}` : '',
@@ -189,8 +187,16 @@ function normalizeSubmission(s: SubmissionApi): Submission {
 export default function AdminDashboard() {
   // ✅ 你可以改成从 env / localStorage 读取
   const API_BASE = ''; // 例如：https://your-domain.com
-  // const ADMIN_KEY = (typeof window !== 'undefined' && localStorage.getItem('ADMIN_KEY')) || '';
   const ADMIN_KEY = 'your_super_secret';
+
+  // ✅ 登录门禁（演示用：前端校验）
+  const AUTH_STORAGE_KEY = 'ADMIN_DASHBOARD_AUTH_V1';
+  const [authed, setAuthed] = useState(false);
+
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginUser, setLoginUser] = useState('admin');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginErr, setLoginErr] = useState<string | null>(null);
 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
@@ -207,8 +213,42 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ 首次进入：检查是否已登录，没登录就弹窗
+  useEffect(() => {
+    const ok = typeof window !== 'undefined' && sessionStorage.getItem(AUTH_STORAGE_KEY) === '1';
+    setAuthed(ok);
+    setLoginOpen(!ok);
+  }, []);
+
+  const doLogout = () => {
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    setAuthed(false);
+
+    setLoginPass('');
+    setLoginErr(null);
+    setLoginOpen(true);
+
+    setSubmissions([]);
+    setSelectedSubmission(null);
+    setPage(1);
+  };
+
+  const doLogin = () => {
+    setLoginErr(null);
+    if (loginUser === 'admin' && loginPass === '123456') {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, '1');
+      setAuthed(true);
+      setLoginOpen(false);
+      setLoginPass('');
+      return;
+    }
+    setLoginErr('账号或密码错误');
+  };
+
   // ========= Fetch =========
   useEffect(() => {
+    if (!authed) return;
+
     let aborted = false;
 
     async function fetchData() {
@@ -257,7 +297,7 @@ export default function AdminDashboard() {
     return () => {
       aborted = true;
     };
-  }, [API_BASE, ADMIN_KEY, page, limit, filter]);
+  }, [authed, API_BASE, ADMIN_KEY, page, limit, filter]);
 
   // ========= Search filtering (client-side) =========
   const filteredBySearch = useMemo(() => {
@@ -291,7 +331,6 @@ export default function AdminDashboard() {
     downloadTextFile(filename, csv, 'text/csv;charset=utf-8');
   };
 
-  // 前端只做 UI 乐观更新；你有 PATCH 接口再接入即可
   const handleStatusChangeLocal = (id: string, newStatus: Status) => {
     setSubmissions((prev) => prev.map((it) => (it.id === id ? { ...it, status: newStatus } : it)));
     if (selectedSubmission?.id === id) {
@@ -300,7 +339,19 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50 text-gray-700 font-sans flex">
+    <div className="min-h-screen bg-orange-50 text-gray-700 font-sans flex relative">
+      {/* ✅ Login Modal */}
+      {loginOpen && (
+        <LoginModal
+          username={loginUser}
+          password={loginPass}
+          error={loginErr}
+          onChangeUsername={setLoginUser}
+          onChangePassword={setLoginPass}
+          onSubmit={doLogin}
+        />
+      )}
+
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-100 hidden md:flex flex-col shadow-xl shadow-orange-100/40">
         <div className="p-6 border-b border-gray-100">
@@ -339,7 +390,10 @@ export default function AdminDashboard() {
         </nav>
 
         <div className="p-4 border-t border-gray-100">
-          <button className="flex items-center gap-3 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors w-full hover:bg-orange-50 rounded-xl">
+          <button
+            onClick={doLogout}
+            className="flex items-center gap-3 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors w-full hover:bg-orange-50 rounded-xl"
+          >
             <LogOut size={18} />
             <span>ログアウト</span>
           </button>
@@ -423,7 +477,7 @@ export default function AdminDashboard() {
                 <div className="font-semibold text-gray-900">読み込みに失敗しました</div>
                 <div className="text-gray-600 break-all">{error}</div>
                 <div className="text-gray-500 mt-2">
-                  ヒント：`x-admin-key` が未設定/不一致の場合は 401 になります（localStorage の ADMIN_KEY を確認）。
+                  ヒント：`x-admin-key` が未設定/不一致の場合は 401 になります（localStorage の ADMIN_KEY を确认）。
                 </div>
               </div>
             </div>
@@ -571,6 +625,76 @@ export default function AdminDashboard() {
 }
 
 // ==========================================
+// Login Modal
+// ==========================================
+function LoginModal({
+  username,
+  password,
+  error,
+  onChangeUsername,
+  onChangePassword,
+  onSubmit,
+}: {
+  username: string;
+  password: string;
+  error: string | null;
+  onChangeUsername: (v: string) => void;
+  onChangePassword: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 shadow-2xl shadow-orange-200/40 p-6">
+        <div className="text-lg font-semibold text-gray-900 mb-1">管理员登录</div>
+        <div className="text-sm text-gray-500 mb-6">请输入账号密码后继续访问</div>
+
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">账号</label>
+            <input
+              value={username}
+              onChange={(e) => onChangeUsername(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
+              placeholder="admin"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">密码</label>
+            <input
+              value={password}
+              onChange={(e) => onChangePassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSubmit();
+              }}
+              type="password"
+              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
+              placeholder="123456"
+            />
+          </div>
+
+          <button
+            onClick={onSubmit}
+            className="w-full mt-2 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl font-semibold text-sm shadow-lg shadow-orange-200/50"
+          >
+            登录
+          </button>
+        </div>
+
+        <div className="mt-4 text-xs text-gray-400">提示：当前为前端演示门禁，真正安全鉴权请放到后端。</div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 // Detail Modal (supports multi-photos) - r2_key only
 // ==========================================
 function DetailModal({
@@ -586,7 +710,6 @@ function DetailModal({
 }) {
   const photos = submission.photos ?? [];
 
-  // 默认取封面
   const initial = getCoverUrl(submission);
   const [activeUrl, setActiveUrl] = useState<string>(initial);
 
@@ -601,7 +724,11 @@ function DetailModal({
         <div className="md:w-1/2 bg-gray-50 flex flex-col p-4 relative">
           <div className="flex-1 flex items-center justify-center relative group">
             {activeUrl ? (
-              <img src={activeUrl} alt={submission.title} className="max-h-[60vh] md:max-h-[80vh] object-contain" />
+              <img
+                src={activeUrl}
+                alt={submission.title}
+                className="max-h-[60vh] md:max-h-[80vh] object-contain"
+              />
             ) : (
               <div className="text-gray-400 flex items-center gap-2">
                 <ImageIcon size={18} /> No image
@@ -660,7 +787,9 @@ function DetailModal({
 
           <div className="space-y-6 flex-1">
             <div>
-              <h3 className="text-orange-600 text-xs uppercase tracking-widest font-semibold mb-2">DESCRIPTION</h3>
+              <h3 className="text-orange-600 text-xs uppercase tracking-widest font-semibold mb-2">
+                DESCRIPTION
+              </h3>
               <p className="text-gray-600 leading-relaxed text-sm">{submission.description}</p>
             </div>
 
