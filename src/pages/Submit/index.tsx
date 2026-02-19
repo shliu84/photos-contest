@@ -16,7 +16,7 @@ const SubmitPage = () => {
   return (
     <div className="pt-24 pb-20 px-4 max-w-3xl mx-auto animate-fade-in-up">
       <div className="text-center mb-12">
-        <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">応募フォーム</h1>
+        <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">投稿フォーム</h1>
         <p className="text-gray-500">
           以下のフォームに必要事項を入力し、作品を投稿してください。<br className="hidden md:block" />
           <span className="text-[#c0a062]">必須</span> は必須項目です。

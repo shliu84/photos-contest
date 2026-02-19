@@ -18,6 +18,7 @@ export const useSubmitForm = () => {
     location: "",
     photo_title: "",
     photo_description: "",
+    rotation: "0"
   }]);
 
   const [submitting, setSubmitting] = useState(false);
@@ -48,7 +49,7 @@ export const useSubmitForm = () => {
       {
         id: crypto.randomUUID(),
         file: null, previewUrl: null, uploading: false, meta: null,
-        taken_at: "", location: "", photo_title: "", photo_description: "",
+        taken_at: "", location: "", photo_title: "", photo_description: "",rotation: "0"
       },
     ]);
   };
@@ -65,7 +66,7 @@ export const useSubmitForm = () => {
     photos.forEach((p) => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
     setPhotos([{
       id: crypto.randomUUID(), file: null, previewUrl: null, uploading: false, meta: null,
-      taken_at: "", location: "", photo_title: "", photo_description: "",
+      taken_at: "", location: "", photo_title: "", photo_description: "",rotation: "0"
     }]);
     setError(null);
   };

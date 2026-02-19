@@ -18,4 +18,6 @@ export interface PhotoSlot {
   location: string;
   photo_title: string;
   photo_description: string;
+
+  rotation: string; // ✅ 新增：用 string 适配你 updatePhotoField 的签名
 }

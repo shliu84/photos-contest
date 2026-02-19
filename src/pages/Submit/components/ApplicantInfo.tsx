@@ -164,7 +164,7 @@ export const ApplicantInfo = () => {
             name="email"
             type="email"
             required
-            placeholder="例）yamada@smartcross.jp（半角英数）"
+            placeholder="例）yamada@yahoo.jp（半角英数）"
             className={inputBase}
           />
         </div>
