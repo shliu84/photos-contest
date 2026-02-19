@@ -30,14 +30,14 @@ const Overview = () => (
       <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
         <RoundCard icon={<Calendar className="w-8 h-8" />} title="募集期間">
           <p className="leading-relaxed text-sm">
-            <strong className="block text-lg text-[#c0a062] mb-1">
-              2026.3.6
+            <strong className="block text-center text-lg text-[#c0a062] mb-1">
+              2026年3月6日（金）
             </strong>
             <span className="block text-center text-gray-400 my-1">↓</span>
-            <strong className="block text-lg text-[#c0a062] mb-2">
-              2026.4.12 (日)
+            <strong className="block text-center text-lg text-[#c0a062] mb-2">
+              2026年4月12日（日）
             </strong>
-            <span className="text-xs text-gray-400 block mt-2 border-t border-gray-100 pt-2">
+            <span className="text-center text-xs text-gray-400 block mt-2 border-t border-gray-100 pt-2">
               ※期間は変更になる場合があります
             </span>
           </p>

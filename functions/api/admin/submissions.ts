@@ -80,10 +80,7 @@
 
 import { DiscoverBehavior } from "react-router-dom";
 
-interface Env {
-  DB: DB;
-  ADMIN_SECRET_KEY: string;
-}
+
 
 /**
  * Cloudflare Pages Function: GET /api/admin/submissions

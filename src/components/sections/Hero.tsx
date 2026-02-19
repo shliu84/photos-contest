@@ -20,21 +20,21 @@ const Hero: React.FC<HeroProps> = ({ onNavigateToSubmit }) =>
     </div>
     {/* 强烈的白色渐变遮罩，让底部完全变白 */}
     {/* 白色渐变蒙版 */}
-    {/* <div
+    <div
   className="
     absolute left-0 top-0
     w-full h-[120%]
     pointer-events-none
-    bg-[radial-gradient(ellipse_100%_65%_at_50%_40%,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.5)_55%,rgba(255,255,255,0)_70%)]
+    bg-[radial-gradient(ellipse_90%_90%_at_50%_40%,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.5)_55%,rgba(255,255,255,0)_70%)]
   "
-/> */}
-<div
+/>
+{/* <div
   className={`
     absolute left-0 top-0 w-full h-[120%] pointer-events-none
     bg-[radial-gradient(ellipse_90%_90%_at_50%_40%,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.5)_55%,rgba(255,255,255,0)_70%)]
-    md:bg-[radial-gradient(ellipse_90%_65%_at_50%_40%,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.5)_55%,rgba(255,255,255,0)_70%)]
+    md:bg-[radial-gradient(ellipse_90%_90%_at_50%_40%,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.5)_55%,rgba(255,255,255,0)_70%)]
   `}
-/>
+/> */}
 
   {/* <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.6)_30%,rgba(255,255,255,0.2)_55%,rgba(255,255,255,0)_75%)]" /> */}
     {/* <div className="absolute inset-0 bg-gradient-to-t from-[#fffbf5] via-[#fffbf5]/60 to-transparent" /> */}

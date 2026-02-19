@@ -122,10 +122,6 @@
 
 // functions/api/submission.ts
 
-interface Env {
-  DB: DB;
-  // 注意：这个接口不再需要 BUCKET binding，因为上传已经在前端完成了
-}
 
 // 1. 定义前端传过来的 JSON 数据结构
 interface PhotoMeta {

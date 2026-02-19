@@ -8,6 +8,7 @@ import News from './components/sections/News';
 import Story from './components/sections/Story';
 import Overview from './components/sections/Overview';
 import SubmitForm from './components/pages/SubmitForm';
+import SubmitForm2 from './components/pages/SubmitForm2';
 import SuccessPage from './components/pages/SuccessPage';
 import AdminDashboard from './components/pages/AdminDashboard';
 
@@ -60,6 +61,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage onNavigateToSubmit={navigateToSubmit} />} />
         <Route path="/submit" element={<SubmitForm />} />
+        <Route path="/submit2" element={<SubmitForm2 />} />
         <Route path="/success" element={<SuccessPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Routes>
