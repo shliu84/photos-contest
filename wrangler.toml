@@ -1,4 +1,4 @@
-name = "panda-photo-contest-api"
+name = "submission-photo-system"
 compatibility_date = "2026-02-12"
 
 # 关键：Pages 必须有这个，用来指定静态产物目录
