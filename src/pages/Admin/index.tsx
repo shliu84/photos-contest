@@ -436,11 +436,10 @@ export default function AdminDashboard() {
                 <button
                   key={f}
                   onClick={() => onChangeFilter(f)}
-                  className={`px-4 py-2 rounded-xl text-sm capitalize transition-colors border ${
-                    filter === f
+                  className={`px-4 py-2 rounded-xl text-sm capitalize transition-colors border ${filter === f
                       ? 'bg-orange-100 text-orange-800 border-orange-200 font-semibold'
                       : 'bg-white text-gray-600 border-gray-200 hover:bg-orange-50'
-                  }`}
+                    }`}
                 >
                   {f}
                 </button>
@@ -760,9 +759,8 @@ function DetailModal({
                     <button
                       key={String(p.id)}
                       onClick={() => setActiveUrl(url)}
-                      className={`w-16 h-16 rounded-xl overflow-hidden border transition-colors flex-shrink-0 ${
-                        active ? 'border-orange-300' : 'border-gray-200 hover:border-orange-200'
-                      }`}
+                      className={`w-16 h-16 rounded-xl overflow-hidden border transition-colors flex-shrink-0 ${active ? 'border-orange-300' : 'border-gray-200 hover:border-orange-200'
+                        }`}
                       title="切り替え"
                     >
                       <img src={url} alt="" className="w-full h-full object-cover" />

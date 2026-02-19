@@ -49,11 +49,12 @@ const Overview = () => (
               <span className="w-5 h-5 rounded-full bg-yellow-100 text-[#c0a062] flex items-center justify-center text-xs shrink-0">
                 1
               </span>
-              パンダの写真
-              <br />
-              <span className="text-xs text-gray-400">
-                (年代不問/デジタル・フィルム可)
-              </span>
+              <div className="flex flex-col">
+                <span>パンダの写真</span>
+                <span className="text-xs text-gray-400">
+                  (年代不問/デジタル・フィルム可)
+                </span>
+              </div>
             </li>
             <li className="flex items-start gap-2">
               <span className="w-5 h-5 rounded-full bg-yellow-100 text-[#c0a062] flex items-center justify-center text-xs shrink-0">
