@@ -1,293 +1,372 @@
-/**
- * @api {POST} /api/submission 提交投稿（保存投稿信息 + 照片元数据）
- * @apiName CreateSubmission
- * @apiGroup Submission
- *
- * @apiDescription
- * 前端完成 R2 直传后，将投稿表单信息与每张照片的元数据（包含 r2_key）以 JSON 提交到本接口。
- * 本接口只负责写入 D1：
- * - submissions 表：一条投稿记录（status 固定写入 'submitted'）
- * - photos 表：对应的多条照片记录（status 固定写入 'active'，sort_order 按数组顺序）
- *
- * ---
- * 🌐 CORS
- * - Access-Control-Allow-Origin: *
- * - Access-Control-Allow-Methods: POST, OPTIONS
- * - Access-Control-Allow-Headers: Content-Type
- *
- * ---
- * 📥 请求方法
- * - POST（仅支持 POST；OPTIONS 为 CORS 预检）
- *
- * ---
- * 📥 请求头（Headers）
- * | 名称          | 类型   | 必填 | 说明 |
- * |---------------|--------|------|------|
- * | Content-Type  | string | 是   | application/json |
- *
- * ---
- * 📥 请求体（JSON Body）
- * @apiParamExample {json} Request-Body:
- * {
- *   "work_title": "桜とパンダ",
- *   "episode": "上野で見た思い出",
- *   "name_kanji": "山田 太郎",
- *   "name_kana": "やまだ たろう",
- *   "email": "yamada@example.com",
- *   "phone": "090-1234-5678",
- *   "agreed_terms": 1,
- *
- *   "shoot_date": "2026-03-07",
- *   "shoot_location": "上野公園",
- *   "pen_name": "たろう",
- *
- *   "photos": [
- *     {
- *       "r2_key": "uploads/uuid_foo.jpg",
- *       "original_filename": "foo.jpg",
- *       "content_type": "image/jpeg",
- *       "size_bytes": 123456
- *     }
- *   ]
- * }
- *
- * 字段说明：
- * ✅ 必填字段
- * - work_title: string 作品标题
- * - episode: string 故事/说明
- * - name_kanji: string 姓名（汉字）
- * - name_kana: string 姓名（假名）【建议前端仍传，后端当前未强校验但会入库】
- * - email: string 邮箱
- * - phone: string 电话
- * - agreed_terms: number 必须为 1（表示同意条款；DB 存 0/1）
- * - photos: PhotoMeta[] 至少 1 张，最多 5 张
- *
- * PhotoMeta（每张照片）：
- * - r2_key: string 必填，来自 /api/upload-url 返回的 key
- * - original_filename: string 必填，原始文件名（用于 DB 记录）
- * - content_type?: string 选填，如 image/jpeg
- * - size_bytes?: number 选填，文件大小（字节）
- *
- * 选填字段：
- * - shoot_date?: string 拍摄日期（格式由前端约定，例如 YYYY-MM-DD）
- * - shoot_location?: string 拍摄地点
- * - pen_name?: string 笔名
- *
- * ---
- * ✅ 成功响应（201）
- * @apiSuccessExample {json} Created:
- * {
- *   "success": true,
- *   "submissionId": "b3f1c1a0-....-....",
- *   "message": "Submission saved successfully"
- * }
- *
- * ---
- * ❌ 失败响应
- *
- * @apiError (400) BadRequest 参数错误 / 校验失败 / JSON 解析失败
- * @apiErrorExample {json} MissingRequired:
- * { "error": "Missing required fields" }
- *
- * @apiErrorExample {json} TermsRequired:
- * { "error": "You must agree to the terms." }
- *
- * @apiErrorExample {json} MissingPhotos:
- * { "error": "Missing photos" }
- *
- * @apiErrorExample {json} TooManyPhotos:
- * { "error": "Too many photos (max 5)" }
- *
- * @apiErrorExample {json} PhotoMetaInvalid:
- * { "error": "Photo at index 0 is missing key or filename" }
- *
- * @apiError (405) MethodNotAllowed 非 POST 请求
- * @apiErrorExample {json} MethodNotAllowed:
- * { "error": "Method Not Allowed" }
- *
- * @apiError (500) InternalServerError 缺少 D1 绑定
- * @apiErrorExample {json} MissingD1:
- * { "error": "Missing D1 binding" }
- *
- * ---
- * 📝 行为与约束（后端实现细节）
- * - submissions.id：服务端生成 UUID
- * - photos.id：服务端为每张照片生成 UUID
- * - created_at_ms / updated_at_ms：服务端写入当前毫秒时间戳
- * - submissions.status：固定写入 'submitted'
- * - photos.status：固定写入 'active'
- * - photos.sort_order：按 photos 数组顺序（0~4）
- */
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
 
-
-// functions/api/submission.ts
-
-
-// 1. 定义前端传过来的 JSON 数据结构
-interface PhotoMeta {
-  r2_key: string;            // 必填：upload-url 生成的 key
-  original_filename: string; // 必填：用于数据库记录
-  content_type?: string;     // 选填
-  size_bytes?: number;       // 选填
-}
-
-interface SubmissionBody {
-  // --- 必填字段 ---
-  work_title: string;
-  episode: string;
-  name_kanji: string;
-  name_kana: string;
-  email: string;
-  phone: string;
-  agreed_terms: number; // 数据库存的是 0/1
-
-  // --- 选填字段 ---
-  shoot_date?: string;
-  shoot_location?: string;
-  pen_name?: string;
-
-  // --- 照片元数据列表 ---
-  photos: PhotoMeta[];
-}
-
-// Helper: 统一返回 JSON
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
-    },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
-export async function onRequest({ request, env }: { request: Request; env: Env }) {
-  // 1. CORS 预检
-  if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
-      }
-    });
-  }
+function isNonEmptyString(v: any) {
+  return typeof v === "string" && v.trim().length > 0;
+}
 
-  // 只允许 POST
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function normPostalCode(pc: string) {
+  return pc.replace(/\D/g, ""); // digits only
+}
+
+function isValidBirthDate(s: string) {
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(s);
+}
+
+function toInt(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) && Number.isInteger(n) ? n : null;
+}
+
+export async function onRequest({ request, env }: { request: Request; env: any }) {
+  // CORS
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
   if (request.method !== "POST") {
     return json({ error: "Method Not Allowed" }, 405);
   }
-
   if (!env.DB) {
-    return json({ error: "Missing D1 binding" }, 500);
+    return json({ error: "Missing env vars", missing: ["DB (D1 binding)"] }, 500);
   }
 
+  // Parse JSON
+  const ct = request.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    return json({ error: "Unsupported Content-Type (use application/json)" }, 415);
+  }
+
+  let body: any;
   try {
-    // ✅ 改动 1: 解析 JSON 而不是 FormData
-    const body = await request.json<SubmissionBody>();
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body" }, 400);
+  }
 
-    // ===== 2. 字段校验 =====
-    
-    // 必填项检查
-    if (!body.work_title || !body.episode || !body.name_kanji || !body.email || !body.phone) {
-      return json({ error: "Missing required fields" }, 400);
+  // Validate basics
+  const uploadSessionId = String(body?.upload_session_id || "").trim();
+  const workTitle = String(body?.work_title || "").trim();
+  const workDescription = String(body?.work_description || "").trim();
+  const agreedTerms = toInt(body?.agreed_terms);
+
+  if (!uploadSessionId) return json({ error: "Missing upload_session_id" }, 400);
+  if (!workTitle) return json({ error: "Missing work_title" }, 400);
+  if (!workDescription) return json({ error: "Missing work_description" }, 400);
+  if (agreedTerms !== 1) return json({ error: "agreed_terms must be 1" }, 400);
+
+  const contacts = body?.contacts;
+  if (!contacts || typeof contacts !== "object") {
+    return json({ error: "Missing contacts" }, 400);
+  }
+
+  const requiredContactFields = [
+    "last_name",
+    "first_name",
+    "last_name_kana",
+    "first_name_kana",
+    "gender",
+    "birth_date",
+    "email",
+    "postal_code",
+    "prefecture",
+    "address_line1",
+  ];
+
+  for (const k of requiredContactFields) {
+    if (!isNonEmptyString(contacts?.[k])) {
+      return json({ error: `Missing contacts.${k}` }, 400);
     }
+  }
 
-    // 条款检查
-    if (body.agreed_terms !== 1) {
-      return json({ error: "You must agree to the terms." }, 400);
+  const gender = String(contacts.gender).trim();
+  if (!["male", "female", "other"].includes(gender)) {
+    return json({ error: "Invalid contacts.gender" }, 400);
+  }
+
+  const birthDate = String(contacts.birth_date).trim();
+  if (!isValidBirthDate(birthDate)) {
+    return json({ error: "Invalid contacts.birth_date (YYYY-MM-DD)" }, 400);
+  }
+
+  const email = String(contacts.email).trim();
+  if (!isValidEmail(email)) {
+    return json({ error: "Invalid contacts.email" }, 400);
+  }
+
+  const photos = Array.isArray(body?.photos) ? body.photos : null;
+  if (!photos || photos.length === 0) {
+    return json({ error: "Missing photos (must be non-empty array)" }, 400);
+  }
+  if (photos.length > 5) {
+    return json({ error: "Too many photos (max 5)" }, 400);
+  }
+
+  // Validate photos payload + build normalized list
+  const normalizedPhotos: Array<{
+    stored_image_id: string;
+    sort_order: number;
+    photo_title: string | null;
+    photo_description: string | null;
+    shoot_date: string | null;
+    shoot_location: string | null;
+  }> = [];
+
+  const usedSortOrders = new Set<number>();
+  const usedStoredImageIds = new Set<string>();
+
+  for (let i = 0; i < photos.length; i++) {
+    const p = photos[i] || {};
+    const storedImageId = String(p.stored_image_id || "").trim();
+    const sortOrder = toInt(p.sort_order);
+
+    if (!storedImageId) return json({ error: `photos[${i}].stored_image_id is required` }, 400);
+    if (sortOrder == null || sortOrder < 0 || sortOrder > 4) {
+      return json({ error: `photos[${i}].sort_order must be integer 0..4` }, 400);
     }
-
-    // 图片检查
-    if (!body.photos || !Array.isArray(body.photos) || body.photos.length === 0) {
-      return json({ error: "Missing photos" }, 400);
+    if (usedSortOrders.has(sortOrder)) {
+      return json({ error: `Duplicate sort_order: ${sortOrder}` }, 400);
     }
-    if (body.photos.length > 5) {
-      return json({ error: "Too many photos (max 5)" }, 400);
+    if (usedStoredImageIds.has(storedImageId)) {
+      return json({ error: `Duplicate stored_image_id: ${storedImageId}` }, 400);
     }
+    usedSortOrders.add(sortOrder);
+    usedStoredImageIds.add(storedImageId);
 
-    const submissionId = crypto.randomUUID();
-    const now = Date.now(); // 毫秒时间戳
+    normalizedPhotos.push({
+      stored_image_id: storedImageId,
+      sort_order: sortOrder,
+      photo_title: isNonEmptyString(p.photo_title) ? String(p.photo_title).trim() : null,
+      photo_description: isNonEmptyString(p.photo_description) ? String(p.photo_description).trim() : null,
+      shoot_date: isNonEmptyString(p.shoot_date) ? String(p.shoot_date).trim() : null,
+      shoot_location: isNonEmptyString(p.shoot_location) ? String(p.shoot_location).trim() : null,
+    });
+  }
 
-    const statements: D1PreparedStatement[] = [];
+  const now = Date.now();
 
-    // ===== 3. 准备 SQL: 插入 Submission =====
-    // 注意：字段名需与你的 Schema 对应
-    statements.push(
-      env.DB.prepare(`
-        INSERT INTO submissions (
-          id, work_title, episode, shoot_date, shoot_location,
-          name_kanji, name_kana, pen_name, email, phone,
-          agreed_terms, status, created_at_ms, updated_at_ms
-        ) VALUES (
-          ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?,
-          ?, 'submitted', ?, ?
-        )
-      `).bind(
+  // 1) Check upload session
+  const session = await env.DB
+    .prepare(`SELECT id, state, expires_at_ms FROM upload_sessions WHERE id = ?`)
+    .bind(uploadSessionId)
+    .first();
+
+  if (!session) return json({ error: "Upload session not found" }, 404);
+
+  if (session.state === "open" && now > session.expires_at_ms) {
+    await env.DB
+      .prepare(`UPDATE upload_sessions SET state='expired' WHERE id=? AND state='open'`)
+      .bind(uploadSessionId)
+      .run();
+    return json({ error: "Upload session expired" }, 410);
+  }
+  if (session.state !== "open") {
+    return json({ error: `Upload session not open (state=${session.state})` }, 409);
+  }
+
+  // 2) Load stored_images and validate ownership/status
+  // Build placeholders for IN (...)
+  const ids = normalizedPhotos.map((p) => p.stored_image_id);
+  const placeholders = ids.map(() => "?").join(",");
+
+  const storedRows = await env.DB
+    .prepare(
+      `SELECT id, session_id, r2_key, original_filename, content_type, size_bytes, rotation, sort_order, status, created_at_ms
+       FROM stored_images
+       WHERE id IN (${placeholders})`
+    )
+    .bind(...ids)
+    .all();
+
+  const storedList: any[] = storedRows?.results || [];
+  if (storedList.length !== ids.length) {
+    return json({ error: "Some stored_image_id not found" }, 400);
+  }
+
+  const storedById = new Map<string, any>();
+  for (const r of storedList) storedById.set(r.id, r);
+
+  for (const p of normalizedPhotos) {
+    const r = storedById.get(p.stored_image_id);
+    if (!r) return json({ error: "Some stored_image_id not found" }, 400);
+
+    if (r.session_id !== uploadSessionId) {
+      return json({ error: `stored_image does not belong to this session: ${r.id}` }, 409);
+    }
+    if (r.status !== "draft") {
+      return json({ error: `stored_image is not draft: ${r.id}` }, 409);
+    }
+  }
+
+  // 3) Prepare inserts
+  const submissionId = crypto.randomUUID();
+
+  const emailNorm = normEmail(email);
+  const postalCode = String(contacts.postal_code).trim();
+  const postalNorm = normPostalCode(postalCode);
+
+  const batchStatements: any[] = [];
+
+  // submissions
+  batchStatements.push(
+    env.DB.prepare(
+      `INSERT INTO submissions (
+         id, upload_session_id, work_title, work_description,
+         agreed_terms, status, admin_note,
+         created_at_ms, updated_at_ms
+       ) VALUES (?, ?, ?, ?, ?, 'submitted', NULL, ?, ?)`
+    ).bind(submissionId, uploadSessionId, workTitle, workDescription, 1, now, now)
+  );
+
+  // submission_contacts
+  batchStatements.push(
+    env.DB.prepare(
+      `INSERT INTO submission_contacts (
+         submission_id,
+         last_name, first_name, last_name_kana, first_name_kana,
+         pen_name,
+         gender, birth_date,
+         email, email_norm,
+         postal_code, postal_code_norm,
+         prefecture, address_line1, address_line2,
+         phone, phone_norm,
+         created_at_ms, updated_at_ms
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      submissionId,
+      String(contacts.last_name).trim(),
+      String(contacts.first_name).trim(),
+      String(contacts.last_name_kana).trim(),
+      String(contacts.first_name_kana).trim(),
+      isNonEmptyString(contacts.pen_name) ? String(contacts.pen_name).trim() : null,
+      gender,
+      birthDate,
+      email,
+      emailNorm,
+      postalCode,
+      postalNorm,
+      String(contacts.prefecture).trim(),
+      String(contacts.address_line1).trim(),
+      isNonEmptyString(contacts.address_line2) ? String(contacts.address_line2).trim() : null,
+      isNonEmptyString(contacts.phone) ? String(contacts.phone).trim() : null,
+      isNonEmptyString(contacts.phone) ? String(contacts.phone).replace(/\D/g, "") : null,
+      now,
+      now
+    )
+  );
+
+  // photos + photo_variants(original) + stored_images.status update
+  const createdPhotoSummaries: Array<{ photo_id: string; stored_image_id: string; sort_order: number }> = [];
+
+  for (const p of normalizedPhotos) {
+    const stored = storedById.get(p.stored_image_id);
+
+    const photoId = crypto.randomUUID();
+    createdPhotoSummaries.push({ photo_id: photoId, stored_image_id: p.stored_image_id, sort_order: p.sort_order });
+
+    // photos row
+    batchStatements.push(
+      env.DB.prepare(
+        `INSERT INTO photos (
+           id, submission_id, stored_image_id,
+           original_filename,
+           photo_title, photo_description,
+           shoot_date, shoot_location,
+           sort_order,
+           status,
+           created_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+      ).bind(
+        photoId,
         submissionId,
-        body.work_title,
-        body.episode,
-        body.shoot_date || null,
-        body.shoot_location || null,
-        body.name_kanji,
-        body.name_kana,
-        body.pen_name || null,
-        body.email,
-        body.phone,
-        body.agreed_terms, // 传入 1
-        now, // created_at_ms
-        now  // updated_at_ms
+        p.stored_image_id,
+        String(stored.original_filename),
+        p.photo_title,
+        p.photo_description,
+        p.shoot_date,
+        p.shoot_location,
+        p.sort_order,
+        now
       )
     );
 
-    // ===== 4. 准备 SQL: 插入 Photos =====
-    // ✅ 改动 2: 不再上传 R2，直接存入前端传来的 key
-    body.photos.forEach((photo, index) => {
-      // 安全检查
-      if (!photo.r2_key || !photo.original_filename) {
-        throw new Error(`Photo at index ${index} is missing key or filename`);
-      }
+    // photo_variants: original (直接引用已上传对象)
+    // - kind='original'
+    // - r2_key = stored_images.r2_key
+    // - is_ready=1
+    const variantId = crypto.randomUUID();
+    batchStatements.push(
+      env.DB.prepare(
+        `INSERT INTO photo_variants (
+           id, photo_id, kind,
+           r2_key, content_type, size_bytes,
+           width_px, height_px,
+           is_ready, generated_at_ms,
+           error_code, error_message,
+           created_at_ms
+         ) VALUES (?, ?, 'original', ?, ?, ?, NULL, NULL, 1, ?, NULL, NULL, ?)`
+      ).bind(
+        variantId,
+        photoId,
+        String(stored.r2_key),
+        stored.content_type ?? null,
+        stored.size_bytes ?? null,
+        now,
+        now
+      )
+    );
 
-      statements.push(
-        env.DB.prepare(`
-          INSERT INTO photos (
-            id, submission_id, r2_key, original_filename,
-            content_type, size_bytes, sort_order,
-            status, created_at_ms
-          ) VALUES (
-            ?, ?, ?, ?,
-            ?, ?, ?,
-            'active', ?
-          )
-        `).bind(
-          crypto.randomUUID(),
-          submissionId,
-          photo.r2_key,            // 前端已经传好了
-          photo.original_filename,
-          photo.content_type || null,
-          photo.size_bytes || null,
-          index,                   // sort_order 0~4
-          now
-        )
-      );
-    });
+    // stored_images status -> final
+    batchStatements.push(
+      env.DB.prepare(
+        `UPDATE stored_images
+         SET status='final'
+         WHERE id=? AND status='draft'`
+      ).bind(p.stored_image_id)
+    );
+  }
 
-    // ===== 5. 执行 D1 事务 =====
-    await env.DB.batch(statements);
+  // upload_sessions state -> committed
+  batchStatements.push(
+    env.DB.prepare(
+      `UPDATE upload_sessions
+       SET state='committed'
+       WHERE id=? AND state='open'`
+    ).bind(uploadSessionId)
+  );
 
-    return json({
-      success: true,
-      submissionId,
-      message: "Submission saved successfully"
-    }, 201);
+  // 4) Execute as a batch (transactional in D1)
+  try {
+    await env.DB.batch(batchStatements);
 
-  } catch (err: any) {
-    console.error("Submit API Error:", err);
-    // 区分 JSON 解析错误和其他错误
-    return json({ error: err.message || "Internal Server Error" }, 400);
+    return json(
+      {
+        submission_id: submissionId,
+        status: "submitted",
+        created_at_ms: now,
+        photos: createdPhotoSummaries,
+      },
+      201
+    );
+  } catch (err) {
+    console.error("Submission insert failed:", err);
+    return json({ error: "Failed to create submission" }, 500);
   }
 }

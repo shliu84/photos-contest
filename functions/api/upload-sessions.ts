@@ -4,21 +4,24 @@
  * @apiGroup Upload
  *
  * @apiDescription
- * 创建一次“表单草稿上传会话”，用于把上传的 draft_photos 归组到同一个 session_id。
- * 前端拿到 session_id 后，再调用 /api/upload-url?session_id=... 来获取每张图的上传签名。
+ * 创建一次“上传会话”，用于把本次上传到 R2 的图片对象（stored_images）归组到同一个 session_id。
+ * 前端拿到 session_id 后，再调用 /api/upload-url?session_id=... 获取每张图的上传签名；
+ * 上传完成后，服务端会把每个对象写入 stored_images（session_id=...，status='draft'）。
  *
  * --- Request Body (JSON，可选)
  * { "email": "user@example.com", "ttl_ms": 86400000 }
  *
  * --- Success (201)
  * { "session_id": "uuid", "state": "open", "expires_at_ms": 1700000000000, "created_at_ms": 1699990000000 }
- * * =========================================================================
- * * @api {GET} /api/upload-sessions 获取草稿上传会话状态
+ *
+ * =========================================================================
+ * @api {GET} /api/upload-sessions 获取上传会话状态
  * @apiName GetUploadSession
  * @apiGroup Upload
  *
  * @apiDescription
  * 根据 session_id 获取对应上传会话的状态、有效期等信息。
+ * 若会话已超时，会将 state 从 open 更新为 expired（并写回数据库）。
  *
  * --- Request Query
  * ?session_id=uuid (必填)
@@ -27,10 +30,10 @@
  * { "id": "uuid", "email": "user@example.com", "state": "open", "expires_at_ms": 1700000000000, ... }
  */
 
-// 更新了允许的方法，包含 GET 和 POST
+// 允许的方法：GET / POST / OPTIONS
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS", 
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -42,23 +45,22 @@ function json(data: unknown, status = 200) {
 }
 
 function isValidEmail(email: string) {
-  // 足够用的轻量校验（不追求 RFC 完整性）
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export async function onRequest({ request, env }: { request: Request; env: any }) {
-  // 1. CORS preflight
+  // 1) CORS preflight
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  // 2. 检查环境变量
+  // 2) 检查 D1 绑定
   if (!env.DB) {
     return json({ error: "Missing env vars", missing: ["DB (D1 binding)"] }, 500);
   }
 
   // ==========================================
-  // 处理 GET 请求：获取 Session 状态
+  // GET：获取 Session 状态
   // ==========================================
   if (request.method === "GET") {
     const url = new URL(request.url);
@@ -71,8 +73,8 @@ export async function onRequest({ request, env }: { request: Request; env: any }
     try {
       const session = await env.DB
         .prepare(
-          `SELECT id, email, state, expires_at_ms, created_at_ms, updated_at_ms 
-           FROM upload_sessions 
+          `SELECT id, email, state, expires_at_ms, created_at_ms, updated_at_ms
+           FROM upload_sessions
            WHERE id = ?`
         )
         .bind(sessionId)
@@ -82,9 +84,19 @@ export async function onRequest({ request, env }: { request: Request; env: any }
         return json({ error: "Session not found" }, 404);
       }
 
-      // 动态判断是否过期
+      // 判断是否过期：如果 open 且超时，则写回 expired
       const now = Date.now();
       if (session.state === "open" && now > session.expires_at_ms) {
+        await env.DB
+          .prepare(
+            `UPDATE upload_sessions
+             SET state = 'expired'
+             WHERE id = ? AND state = 'open'`
+          )
+          .bind(sessionId)
+          .run();
+
+        // 返回也同步为 expired
         session.state = "expired";
       }
 
@@ -96,7 +108,7 @@ export async function onRequest({ request, env }: { request: Request; env: any }
   }
 
   // ==========================================
-  // 处理 POST 请求：创建新的 Session
+  // POST：创建新的 Session
   // ==========================================
   if (request.method === "POST") {
     let body: any = null;
@@ -164,6 +176,5 @@ export async function onRequest({ request, env }: { request: Request; env: any }
     }
   }
 
-  // 如果既不是 GET 也不是 POST，返回 405
   return json({ error: "Method Not Allowed" }, 405);
 }
